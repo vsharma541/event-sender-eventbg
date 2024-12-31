@@ -1,0 +1,70 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: vsrmmt123
+# "service" is the name of this project. This will also be added to your AWS resource names.
+service: lambda-eventbg
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+
+functions:
+  sendEvent:
+    role: myEventBgPutEventRole
+    handler: handler.sendEvent
+    events:
+      - httpApi:
+          path: /sending
+          method: post
+
+resources:
+  Resources:
+    EventBus:
+      Type: AWS::Events::EventBus
+      Properties:
+        Name: MyNewCustomEventBus
+    
+    InvoiceProcessingRuleCreationStatement:
+      Type: AWS::Events::EventBusPolicy
+      Properties:
+        EventBusName: !Ref EventBus
+        StatementId: "InvoiceProcessingRuleCreation"
+        Statement:
+          Effect: "Allow"
+          Principal:
+            AWS: !Sub arn:aws:iam::354918362658:root
+          Action:
+            - "events:PutRule"
+            - "events:DeleteRule"
+            - "events:DescribeRule"
+            - "events:DisableRule"
+            - "events:EnableRule"
+            - "events:PutTargets"
+            - "events:RemoveTargets"
+          Resource:
+            - !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/${EventBus.Name}/*
+
+    myEventBgPutEventRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: MyEventBgPutEventRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: MyEventBgPutEventRolePolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - events:Put*
+                  Resource: "*"
+
+plugins:
+  - serverless-offline
