@@ -7,64 +7,59 @@ provider:
   name: aws
   runtime: nodejs20.x
   region: us-east-1
+  stage: DEV
 
-functions:
-  sendEvent:
-    role: myEventBgPutEventRole
-    handler: handler.sendEvent
-    events:
-      - httpApi:
-          path: /sending
-          method: post
+custom: ${file(./custom.yml):${self:provider.stage}}
 
 resources:
   Resources:
-    EventBus:
+    MyNewCustomEventBus:
       Type: AWS::Events::EventBus
       Properties:
         Name: MyNewCustomEventBus
     
-    InvoiceProcessingRuleCreationStatement:
-      Type: AWS::Events::EventBusPolicy
+    Rule897ca662:
+      Type: AWS::Events::Rule
       Properties:
-        EventBusName: !Ref EventBus
-        StatementId: "InvoiceProcessingRuleCreation"
-        Statement:
-          Effect: "Allow"
-          Principal:
-            AWS: !Sub arn:aws:iam::354918362658:root
-          Action:
-            - "events:PutRule"
-            - "events:DeleteRule"
-            - "events:DescribeRule"
-            - "events:DisableRule"
-            - "events:EnableRule"
-            - "events:PutTargets"
-            - "events:RemoveTargets"
-          Resource:
-            - !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/${EventBus.Name}/*
-
-    myEventBgPutEventRole:
+        Name: MyNewCustomEventBus-same-acc-rule2
+        EventPattern:
+          source:
+            - NPS
+          detail-type:
+            - nps-kiosk
+            - nps-order-ahead
+        State: ENABLED
+        EventBusName: MyNewCustomEventBus
+        Targets:
+          - Id: Id77a8ee67-2eed-4ff2-a138-e117c27e2ce3
+            Arn: !Sub arn:aws:events:${AWS::Region}:${self:custom.receiverEbAWSAccount}:event-bus/my-receiver-eb
+            RoleArn: !GetAtt Rolecde16c2f.Arn
+              
+    Rolecde16c2f:
       Type: AWS::IAM::Role
       Properties:
-        RoleName: MyEventBgPutEventRole
+        RoleName: vsr-same-acc-eb-role
         AssumeRolePolicyDocument:
           Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Principal:
-                Service:
-                  - lambda.amazonaws.com
+                Service: events.amazonaws.com
               Action: sts:AssumeRole
-        Policies:
-          - PolicyName: MyEventBgPutEventRolePolicy
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - events:Put*
-                  Resource: "*"
+
+    Policy4a9add9b:
+      Type: AWS::IAM::RolePolicy
+      Properties:
+        PolicyName: vsr-same-acc-eb-role-policy
+        RoleName: !Ref Rolecde16c2f
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Sid: ActionsForResource
+              Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: !Sub arn:aws:events:${AWS::Region}:${self:custom.receiverEbAWSAccount}:event-bus/my-receiver-eb
 
 plugins:
   - serverless-offline
