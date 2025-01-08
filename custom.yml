@@ -1,2 +1,5 @@
 DEV:
   receiverEbAWSAccount: 233886345769
+
+PROD:
+  receiverEbAWSAccount: 354918362658

@@ -13,32 +13,32 @@ custom: ${file(./custom.yml):${self:provider.stage}}
 
 resources:
   Resources:
-    MyNewCustomEventBus:
+    MySenderEventBus:
       Type: AWS::Events::EventBus
       Properties:
-        Name: MyNewCustomEventBus
+        Name: MySenderEventBus_${self:provider.stage}
     
-    Rule897ca662:
+    MySenderEventBusRule:
       Type: AWS::Events::Rule
       Properties:
-        Name: MyNewCustomEventBus-same-acc-rule2
+        Name: MySenderEventBus-acc-rule_${self:provider.stage}
         EventPattern:
           source:
-            - NPS
+            - my.application
           detail-type:
-            - nps-kiosk
-            - nps-order-ahead
+            - MyCustomDetail
+            - MyNewDetail
         State: ENABLED
-        EventBusName: MyNewCustomEventBus
+        EventBusName: !GetAtt MySenderEventBus.Name
         Targets:
           - Id: Id77a8ee67-2eed-4ff2-a138-e117c27e2ce3
             Arn: !Sub arn:aws:events:${AWS::Region}:${self:custom.receiverEbAWSAccount}:event-bus/my-receiver-eb
-            RoleArn: !GetAtt Rolecde16c2f.Arn
+            RoleArn: !GetAtt MySenderEventBusRole.Arn
               
-    Rolecde16c2f:
+    MySenderEventBusRole:
       Type: AWS::IAM::Role
       Properties:
-        RoleName: vsr-same-acc-eb-role
+        RoleName: vsr-sender-acc-eb-role-${self:provider.stage}
         AssumeRolePolicyDocument:
           Version: '2012-10-17'
           Statement:
@@ -47,11 +47,11 @@ resources:
                 Service: events.amazonaws.com
               Action: sts:AssumeRole
 
-    Policy4a9add9b:
+    MySenderEventBusPolicy:
       Type: AWS::IAM::RolePolicy
       Properties:
-        PolicyName: vsr-same-acc-eb-role-policy
-        RoleName: !Ref Rolecde16c2f
+        PolicyName: vsr-sender-acc-eb-role-policy-${self:provider.stage}
+        RoleName: !Ref MySenderEventBusRole
         PolicyDocument:
           Version: '2012-10-17'
           Statement:
