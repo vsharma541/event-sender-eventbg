@@ -6,17 +6,40 @@ service: lambda-eventbg
 provider:
   name: aws
   runtime: nodejs20.x
-  region: us-east-1
-  stage: DEV
+  # opt:region is a command line option to specify the region, defaults to us-east-1
+  # opt:stage is a command line option to specify the stage, defaults to DEV
+  # the sample command to deploy this service is: npx serverless deploy --region us-east-1 --stage DEV
+  region: ${opt:region, 'us-east-1'} 
+  stage: ${opt:stage, 'DEV'}
 
 custom: ${file(./custom.yml):${self:provider.stage}}
 
+# conditional deployment of resources based on the region
+# do here is how it should be deployment - first in us-east-1 and then in us-west-2
+# during us-east-1 deployment, the global resources like MySenderEventBusRole and MySenderEventBusPolicy are created
+# during us-west-2 deployment, the global resources like MySenderEventBusRole and MySenderEventBusPolicy are not created, but their ARN is used in the targets of the event bus rule
+# Reason of conditional deployment is that, after creation of the global resources with us-east-1 deployment, while deploying in us-west-2, it throws error that the role/policy already exists!!
 resources:
+  Conditions:
+    IsRegionUSEast: !Equals [ !Ref "AWS::Region", us-east-1 ]
   Resources:
     MySenderEventBus:
       Type: AWS::Events::EventBus
       Properties:
         Name: MySenderEventBus_${self:provider.stage}
+
+    MySenderEventBusRole:
+      Condition: IsRegionUSEast
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: vsr-sender-acc-eb-role-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: sts:AssumeRole
     
     MySenderEventBusRule:
       Type: AWS::Events::Rule
@@ -31,23 +54,16 @@ resources:
         State: ENABLED
         EventBusName: !GetAtt MySenderEventBus.Name
         Targets:
-          - Id: Id77a8ee67-2eed-4ff2-a138-e117c27e2ce3
-            Arn: !Sub arn:aws:events:${AWS::Region}:${self:custom.receiverEbAWSAccount}:event-bus/my-receiver-eb
-            RoleArn: !GetAtt MySenderEventBusRole.Arn
-              
-    MySenderEventBusRole:
-      Type: AWS::IAM::Role
-      Properties:
-        RoleName: vsr-sender-acc-eb-role-${self:provider.stage}
-        AssumeRolePolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service: events.amazonaws.com
-              Action: sts:AssumeRole
+          - Id: Target1
+            Arn: !Sub arn:aws:events:us-east-1:${self:custom.receiverEbAWSAccount}:event-bus/my-receiver-eb1
+            RoleArn: !If [IsRegionUSEast, !GetAtt MySenderEventBusRole.Arn, !Sub 'arn:aws:iam::${AWS::AccountId}:role/vsr-sender-acc-eb-role-${self:provider.stage}' ]
 
+          - Id: Target2
+            Arn: !Sub arn:aws:events:us-west-2:${self:custom.receiverEbAWSAccount}:event-bus/my-receiver-eb1
+            RoleArn: !If [IsRegionUSEast, !GetAtt MySenderEventBusRole.Arn, !Sub 'arn:aws:iam::${AWS::AccountId}:role/vsr-sender-acc-eb-role-${self:provider.stage}' ]
+              
     MySenderEventBusPolicy:
+      Condition: IsRegionUSEast
       Type: AWS::IAM::RolePolicy
       Properties:
         PolicyName: vsr-sender-acc-eb-role-policy-${self:provider.stage}
@@ -55,11 +71,17 @@ resources:
         PolicyDocument:
           Version: '2012-10-17'
           Statement:
-            - Sid: ActionsForResource
+            - Sid: PutEventRolePolicyRegion1
               Effect: Allow
               Action:
                 - events:PutEvents
-              Resource: !Sub arn:aws:events:${AWS::Region}:${self:custom.receiverEbAWSAccount}:event-bus/my-receiver-eb
+              Resource: !Sub arn:aws:events:us-east-1:${self:custom.receiverEbAWSAccount}:event-bus/my-receiver-eb1
+            
+            - Sid: PutEventRolePolicyRegion2
+              Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: !Sub arn:aws:events:us-west-2:${self:custom.receiverEbAWSAccount}:event-bus/my-receiver-eb1
 
 plugins:
   - serverless-offline
